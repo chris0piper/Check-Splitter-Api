@@ -4,13 +4,17 @@ import os
 
 app = Flask(__name__)
 
-client = None
+# client = None
 
 def getFriendsList(username):
+    access_token = os.environ["VENMO_ACCESS_TOKEN"]
+    client = Client(access_token=access_token)
     return client.user.get_user_friends_list(user_id=username)
 
 # requests will be a 2d array in the order of [[id, ammount], [id, ammount], [id, ammount]]
 def requestPayment(self, requests, description):
+    access_token = os.environ["VENMO_ACCESS_TOKEN"]
+    client = Client(access_token=access_token)
     for request in requests:
         self.client.payment.request_money(request[1], description, request[0])
 
@@ -68,6 +72,4 @@ def index():
 
 if __name__ == '__main__':
     # Threaded option to enable multiple instances for multiple user access support
-    access_token = os.environ["VENMO_ACCESS_TOKEN"]
-    client = Client(access_token=access_token)
     app.run(threaded=True, port=5000)
