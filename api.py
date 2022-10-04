@@ -68,6 +68,6 @@ def index():
 
 if __name__ == '__main__':
     # Threaded option to enable multiple instances for multiple user access support
-    access_token = os.environ.get("VENMO_ACCESS_TOKEN")
+    access_token = os.environ["VENMO_ACCESS_TOKEN"]
     client = Client(access_token=access_token)
     app.run(threaded=True, port=5000)
