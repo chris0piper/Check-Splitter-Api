@@ -1,0 +1,2 @@
+web: gunicorn greeting:app
+
