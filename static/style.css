@@ -1,0 +1,22 @@
+/* static/style.css */
+
+h1 {
+  color: navajowhite;
+  font-variant-caps: all-small-caps;
+  font-size: 46px;
+}
+
+h3 {
+color: white;
+font-size: 36px;
+}
+
+p {
+color: black;
+font-size: 50px;
+text-align: center;
+}
+
+body {
+  background: black;
+}

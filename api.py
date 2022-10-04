@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
+
 from venmo_api import ApiClient, UserApi, PaymentApi, AuthenticationApi, validate_access_token, Client
 import os
 
@@ -67,8 +68,8 @@ def post_something():
 @app.route('/')
 def index():
     # A welcome message to test our server
-    return "<h1>Welcome to our medium-greeting-api!</h1>"
-
+    message = "This is a demo html page"
+    return render_template('index.html', message=message)
 
 if __name__ == '__main__':
     # Threaded option to enable multiple instances for multiple user access support
