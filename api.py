@@ -1,75 +1,117 @@
-from flask import Flask, request, jsonify, render_template
-
-from venmo_api import ApiClient, UserApi, PaymentApi, AuthenticationApi, validate_access_token, Client
 import os
+from flask import Flask, flash, request, redirect, url_for, render_template
+from werkzeug.utils import secure_filename
+
+from venmo_api import Client
+from PIL import Image
+from google.cloud import vision
+import io
+import os
+import re
+
+
+
+
+UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 
 app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1000 * 1000
 
-# client = None
-
-def getFriendsList(username):
-    access_token = os.environ["VENMO_ACCESS_TOKEN"]
-    client = Client(access_token=access_token)
-    return client.user.get_user_friends_list(user_id=username)
-
-# requests will be a 2d array in the order of [[id, ammount], [id, ammount], [id, ammount]]
-def requestPayment(self, requests, description):
-    access_token = os.environ["VENMO_ACCESS_TOKEN"]
-    client = Client(access_token=access_token)
-    for request in requests:
-        self.client.payment.request_money(request[1], description, request[0])
+client = vision.ImageAnnotatorClient()
+moneyPattern = re.compile('\A\$*\d+\.{1}\d{2}\$*\Z')
 
 
+def processReciept(filename):
 
-@app.route('/getmsg/', methods=['GET'])
-def respond():
-    # Retrieve the name from the url parameter /getmsg/?name=
-    name = request.args.get("userId", None)
-    users = getFriendsList(name)
-    output = ""
-    for user in users:
-        output += "  " + user.username
-    # For debugging
-    print(f"Received: {name}")
+    #  open this uploaded reciept
+    file_name = os.path.abspath('uploads/' + filename)
+    with io.open(file_name, 'rb') as image_file:
+        content = image_file.read()
+    image = vision.Image(content=content)
 
-    response = {}
+    # Use google vision to scrape the text
+    response = client.document_text_detection(image=image)
 
-    # Check if the user sent a name at all
-    if not name:
-        response["ERROR"] = "No name found. Please send a name."
-    # Check if the user entered a number
-    elif str(name).isdigit():
-        response["ERROR"] = "The name can't be numeric. Please send a string."
-    else:
-        response["MESSAGE"] = output
+    # to calculate the average height of a reciepts line item
+    heightSum = 0
+    heightCount = 0
 
-    # Return the response in json format
-    return jsonify(response)
+    # store a list of lines coming off the bottom and the top of each price. These lines will be used to match
+    # a price with the items associated with them
+    listOfEquations = []
+    items = []
+
+    #Iterate through the reciept text and find all prices. Create the top and bottom lines using y = mx + b
+    for text in response.text_annotations:
+        # if this text is not a price
+        if(not moneyPattern.match(text.description)):
+            continue
+        botLeft = text.bounding_poly.vertices[0]
+        botRight = text.bounding_poly.vertices[1]
+        topRight = text.bounding_poly.vertices[2]
+        topLeft = text.bounding_poly.vertices[3]
+
+        heightSum += (topLeft.y - botLeft.y) + (topRight.y - botRight.y)
+        heightCount += 2
+
+        # create a line from both the top and the bottom of the prices
+        slopeOfTop = (topRight.y-topLeft.y) / (topRight.x-topLeft.x)
+        topIntercept = topLeft.y - (slopeOfTop * topLeft.x)
+        slopeOfBot = (botRight.y-botLeft.y) / (botRight.x-botLeft.x)
+        botIntercept = botLeft.y - (slopeOfBot * botLeft.x)
+
+        listOfEquations.append([slopeOfTop, topIntercept, slopeOfBot, botIntercept])
+        items.append([])
+
+    # calculate how tall the average price is
+    averageLineHeight = heightSum/heightCount
+
+    #get a list of words that allign with a given price
+    for text in response.text_annotations:
+        botLeft = text.bounding_poly.vertices[0]
+        botRight = text.bounding_poly.vertices[1]
+        topRight = text.bounding_poly.vertices[2]
+        topLeft = text.bounding_poly.vertices[3]
+        for i in range(0, len(listOfEquations)):
+            topsAlign = abs(topRight.y - ((topRight.x * listOfEquations[i][0]) + listOfEquations[i][1])) < averageLineHeight * (3/4)
+            botsAlign = abs(botRight.y - ((botRight.x * listOfEquations[i][2]) + listOfEquations[i][3])) < averageLineHeight * (3/4)
+            if(topsAlign and botsAlign):
+                items[i].append(text.description)
+
+    for item in items:
+        print(item)
 
 
-@app.route('/post/', methods=['POST'])
-def post_something():
-    param = request.form.get('userid')
-    users = getFriendsList(param)
-    print(param)
-    # You can add the test cases you made in the previous function, but in our case here you are just testing the POST functionality
-    if param:
-        return jsonify({
-            "Message": users,
-            # Add this option to distinct the POST request
-            "METHOD": "POST"
-        })
-    else:
-        return jsonify({
-            "ERROR": "No name found. Please send a name."
-        })
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route('/', methods=['GET', 'POST'])
+def upload_file():
+    if request.method == 'POST':
+        # check if the post request has the file part
+        if 'file' not in request.files:
+            flash('No file part')
+            return redirect(request.url)
+        file = request.files['file']
+        # If the user does not select a file, the browser submits an
+        # empty file without a filename.
+        if file.filename == '':
+            flash('No selected file')
+            return redirect(request.url)
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+
+            processReciept(filename)
+
+            return redirect(url_for('upload_file', name=filename))
+
+    return render_template('index.html')
 
 
-@app.route('/')
-def index():
-    # A welcome message to test our server
-    message = "This is a demo html page"
-    return render_template('index.html', message=message)
 
 if __name__ == '__main__':
     # Threaded option to enable multiple instances for multiple user access support

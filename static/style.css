@@ -12,11 +12,15 @@ font-size: 36px;
 }
 
 p {
-color: black;
+color: gray;
 font-size: 50px;
 text-align: center;
 }
 
 body {
-  background: black;
+  background: gray;
+}
+
+button{
+  background: blue;
 }
