@@ -1,5 +1,5 @@
 import os
-from flask import Flask, flash, request, redirect, url_for, render_template
+from flask import Flask, flash, request, redirect, url_for, render_template, session
 from werkzeug.utils import secure_filename
 
 from venmo_api import Client
@@ -9,15 +9,14 @@ import io
 import os
 import re
 
-
-
-
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1000 * 1000
+app.secret_key = 'SUPER_SECRET_KEY'
+
 
 client = vision.ImageAnnotatorClient()
 moneyPattern = re.compile('\A\$*\d+\.{1}\d{2}\$*\Z')
@@ -42,12 +41,15 @@ def processReciept(filename):
     # a price with the items associated with them
     listOfEquations = []
     items = []
-
+    largestPrice = 0
     #Iterate through the reciept text and find all prices. Create the top and bottom lines using y = mx + b
     for text in response.text_annotations:
         # if this text is not a price
         if(not moneyPattern.match(text.description)):
             continue
+
+        largestPrice = max(largestPrice, float(text.description))
+
         botLeft = text.bounding_poly.vertices[0]
         botRight = text.bounding_poly.vertices[1]
         topRight = text.bounding_poly.vertices[2]
@@ -80,13 +82,96 @@ def processReciept(filename):
             if(topsAlign and botsAlign):
                 items[i].append(text.description)
 
+    # {
+    #     "TOTAL": "100.00",
+    #     "SUBTOTAL": "99.00",
+    #     "TAX": "1.00",
+    #     "SUS": False,
+    #     "LINE_ITEMS": [
+    #         ["QUANTITY", "DESCRIPTION", "PRICE PER ITEM (total/quantity)"]
+    #         ["1", "chicken sandwhich", "4.00"],
+    #         ["2", "blt", "20.00"],
+    #         ["4", "salad", "23.00"],
+    #         ["2", "beer", "17.00"],
+    #         ["1", "chips", "6..00"]
+    #     ]
+    # }
+
+    sumPrices = 0
+    reciept = {}
+    reciept['LINE_ITEMS'] = []
+    reciept["SUS"] = "False"
     for item in items:
-        print(item)
+        lineItem = []
+        quantity = '1'
+        foundQuantity = False
+        description = ''
+        price = '0.00'
+
+        for word in item:
+            # save price if found
+            if(moneyPattern.match(word)):
+                price = word
+                continue
+
+            # save quanitty if one exists
+            if(not foundQuantity):
+                cleanedWord = word.strip().replace('(', '').replace(')', '')
+                if(cleanedWord.isnumeric()):
+                    quantity = cleanedWord
+                    foundQuantity = True
+                    continue
+
+            # assume everything else is a description
+            description += ' ' + word
+
+        # store the tax and total seperately
+        if(float(price) == largestPrice):
+            reciept['TOTAL'] = price
+            continue
+
+        if('tax' in description.lower()):
+            reciept['TAX'] = price
+            continue
+
+        if('sub' in description.lower()):
+            reciept['SUBTOTAL'] = price
+            continue
+
+        # if its not tax and not total, then it's a line item
+        sumPrices += float(price)
+        lineItem.append(quantity)
+        lineItem.append(description)
+        lineItem.append(str(float(price) / float(quantity)))
+        reciept['LINE_ITEMS'].append(lineItem)
+
+    # # verify that all the items add up to the total minus the tax
+    # if (reciept.get('TAX') == None or reciept.get('TOTAL') == None) or (float(reciept.get('TOTAL')) - float(reciept.get('TAX') != sumPrices)):
+    #     reciept['SUS'] = True
+    
+    # print(reciept)
+    return reciept
+
+
+def getVenmoFriends(username):
+    access_token = os.environ.get("VENMO_ACCESS_TOKEN")
+    client = Client(access_token=access_token)
+    friends = client.user.get_user_friends_list(user_id=username)
+    dataMap = {}
+    namesToIDs = []
+    for friend in friends:
+        nameToId = []
+        nameToId.append(friend.first_name + " " + friend.last_name + " - " + friend.username)
+        nameToId.append(friend.id)
+        namesToIDs.append(nameToId)
+    dataMap["NAMES_TO_IDS"] = namesToIDs
+    return dataMap
 
 
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
@@ -105,11 +190,35 @@ def upload_file():
             filename = secure_filename(file.filename)
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
 
-            processReciept(filename)
+            session['reciept'] = processReciept(filename)
 
-            return redirect(url_for('upload_file', name=filename))
+            return redirect(url_for('check_reciept'))
 
     return render_template('index.html')
+
+
+
+# Sends the reciept
+@app.route('/reciept', methods=['GET', 'POST'])
+def check_reciept():
+    if request.method == 'POST':
+        print(request.data)
+        session['reciept'] = request.data
+        return redirect('/friends')
+    return render_template('recieptReview.html', data=session['reciept'])
+
+
+# add friends that were there
+@app.route('/friends', methods=['GET', 'POST'])
+def add_friends():
+    # if request.method == 'POST':
+    #     dataMap = getVenmoFriends("chris0piper")
+    #     print(dataMap)
+    #     return render_template('addFriends.html', data=dataMap)
+
+    dataMap = getVenmoFriends("chris0piper")
+    # print(dataMap)
+    return render_template('addFriends.html', data=dataMap)
 
 
 
