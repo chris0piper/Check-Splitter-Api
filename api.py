@@ -161,7 +161,7 @@ def getVenmoFriends(username):
     namesToIDs = []
     for friend in friends:
         nameToId = []
-        nameToId.append(friend.first_name + " " + friend.last_name + " - " + friend.username)
+        nameToId.append(friend.first_name.replace('\'', '') + " " + friend.last_name.replace('\'', '') + " - " + friend.username)
         nameToId.append(friend.id)
         namesToIDs.append(nameToId)
     dataMap["NAMES_TO_IDS"] = namesToIDs
