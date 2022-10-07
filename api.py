@@ -204,7 +204,8 @@ def check_reciept():
     if request.method == 'POST':
         print(request.data)
         session['reciept'] = request.data
-        return redirect('/friends')
+        return "Success"
+        # return redirect('/friends')
     return render_template('recieptReview.html', data=session['reciept'])
 
 
@@ -220,6 +221,25 @@ def add_friends():
     # print(dataMap)
     return render_template('addFriends.html', data=dataMap)
 
+
+# Sends the reciept
+@app.route('/checkVenmoUsername', methods=['POST'])
+def checkVenmoUsername():
+    if request.method == 'POST':
+        username = request.data.decode()
+        access_token = os.environ.get("VENMO_ACCESS_TOKEN")
+        client = Client(access_token=access_token)
+        users = client.user.search_for_users(query = username, limit=10)
+        allUsers = []
+        for user in users:
+            arrayUser = []
+            arrayUser.append(user.first_name.replace('\'', '') + " " + user.last_name.replace('\'', '') + " - " + user.username)
+            arrayUser.append(user.id)
+            allUsers.append(arrayUser)
+        # Add in functionality to display options of the name
+        return allUsers
+        # return redirect('/friends')
+    return render_template('recieptReview.html', data=session['reciept'])
 
 
 if __name__ == '__main__':

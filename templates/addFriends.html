@@ -1,10 +1,23 @@
+<head>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+</head>
 <!-- <div id="recieptMap">{{ data }}</div> -->
 <div style="display:none;" id="friendsMap">{{ data }}</div> 
 <!-- <h1>Welcome to the HomePage!</h1> --> -->
 
 
-<input name="friends" list="anrede" />
+<input id="dlist" name="friends" list="anrede" />
 <datalist id="anrede"></datalist>
 
 
+
+<table class="table" id="friendsList">
+    <tr>
+      <th>Name</th>
+      <th>Delete</th>
+    </tr>
+</table>
+
+<link rel="stylesheet" href="static/friends.css">
 <script src="static/friends.js"></script>
+<script src="jquery-3.6.0.min.js"></script>
