@@ -8,6 +8,7 @@ from google.cloud import vision
 import io
 import os
 import re
+import json
 
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
@@ -80,7 +81,7 @@ def processReciept(filename):
             topsAlign = abs(topRight.y - ((topRight.x * listOfEquations[i][0]) + listOfEquations[i][1])) < averageLineHeight * (3/4)
             botsAlign = abs(botRight.y - ((botRight.x * listOfEquations[i][2]) + listOfEquations[i][3])) < averageLineHeight * (3/4)
             if(topsAlign and botsAlign):
-                items[i].append(text.description)
+                items[i].append(text.description.replace("\'", "").replace("\"", ""))
 
     # {
     #     "TOTAL": "100.00",
@@ -96,6 +97,7 @@ def processReciept(filename):
     #         ["1", "chips", "6..00"]
     #     ]
     # }
+
 
     sumPrices = 0
     reciept = {}
@@ -149,7 +151,6 @@ def processReciept(filename):
     # if (reciept.get('TAX') == None or reciept.get('TOTAL') == None) or (float(reciept.get('TOTAL')) - float(reciept.get('TAX') != sumPrices)):
     #     reciept['SUS'] = True
     
-    # print(reciept)
     return reciept
 
 
@@ -166,6 +167,21 @@ def getVenmoFriends(username):
         namesToIDs.append(nameToId)
     dataMap["NAMES_TO_IDS"] = namesToIDs
     return dataMap
+
+def sendVenmoRequests(requests):
+    access_token = os.environ.get("VENMO_ACCESS_TOKEN")
+    client = Client(access_token=access_token)
+
+    friendIds = requests.keys()
+    for id in friendIds:
+        description = ''
+        totalPrice = 0
+        for lineItem in requests[id]:
+            description += '(' + lineItem[0] + ')' + lineItem[1] + ' (' + lineItem[2] + '$ each)' + '\n'
+            totalPrice += float(lineItem[0]) * float(lineItem[2])
+        if len(description) > 200:
+            description = description[0:196] + '\n...'
+        client.payment.request_money(totalPrice, description, id)
 
 
 def allowed_file(filename):
@@ -202,8 +218,7 @@ def upload_file():
 @app.route('/reciept', methods=['GET', 'POST'])
 def check_reciept():
     if request.method == 'POST':
-        print(request.data)
-        session['reciept'] = request.data
+        session['reciept'] = request.data.decode()
         return "Success"
         # return redirect('/friends')
     return render_template('recieptReview.html', data=session['reciept'])
@@ -212,14 +227,26 @@ def check_reciept():
 # add friends that were there
 @app.route('/friends', methods=['GET', 'POST'])
 def add_friends():
-    # if request.method == 'POST':
-    #     dataMap = getVenmoFriends("chris0piper")
-    #     print(dataMap)
-    #     return render_template('addFriends.html', data=dataMap)
+    if request.method == 'POST':
+        session['friends'] = request.data
+        return "Success"
 
     dataMap = getVenmoFriends("chris0piper")
-    # print(dataMap)
     return render_template('addFriends.html', data=dataMap)
+
+# add friends that were there
+@app.route('/assignItems', methods=['GET', 'POST'])
+def assign_items():
+    if request.method == 'POST':
+        data = request.data.decode()
+        dictData = json.loads(data)
+        session['finalSituation'] = dictData
+        sendVenmoRequests(dictData)
+        return "Success"
+
+    dataMap = json.loads(session['reciept'])
+    dataMap['friends'] = json.loads(session['friends'].decode())
+    return render_template('assignItems.html', data=dataMap)
 
 
 # Sends the reciept
@@ -240,6 +267,11 @@ def checkVenmoUsername():
         return allUsers
         # return redirect('/friends')
     return render_template('recieptReview.html', data=session['reciept'])
+
+# Sends the reciept
+@app.route('/success', methods=['GET'])
+def success():
+    return render_template('success.html')
 
 
 if __name__ == '__main__':

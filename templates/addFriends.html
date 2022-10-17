@@ -3,8 +3,9 @@
 </head>
 <!-- <div id="recieptMap">{{ data }}</div> -->
 <div style="display:none;" id="friendsMap">{{ data }}</div> 
-<!-- <h1>Welcome to the HomePage!</h1> --> -->
+<!-- <h1>Welcome to the HomePage!</h1> --> 
 
+<h1> Add Friends you were with</h1>
 
 <input id="dlist" name="friends" list="anrede" />
 <datalist id="anrede"></datalist>
@@ -17,6 +18,9 @@
       <th>Delete</th>
     </tr>
 </table>
+
+<button onclick="saveFriends()"type="button">NEXT!</button>
+
 
 <link rel="stylesheet" href="static/friends.css">
 <script src="static/friends.js"></script>

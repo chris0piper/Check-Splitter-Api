@@ -4,10 +4,12 @@ var stringMap = list.innerHTML.replaceAll("\'", "\"")
 var users = JSON.parse(stringMap);
 var arrayOfUsers = users["NAMES_TO_IDS"]
 
+var userMap = new Map()
 
 var options = '';
 for (var i = 0; i < arrayOfUsers.length; i++) {
   options += '<option value="' + arrayOfUsers[i][0] + '" />';
+  userMap.set(arrayOfUsers[i][0], arrayOfUsers[i][1])
 }
 
 var dlist = document.getElementById('anrede')
@@ -90,4 +92,43 @@ function addFriendToTable(name){
   deleteButton.style.height = "15px"
   deleteButton.class = "fa fa-close"
   deleteCell.appendChild(deleteButton)
+}
+
+
+
+function emitFriends(output) {
+  xhr = getXmlHttpRequestObject();
+  xhr.onreadystatechange = function () {
+      if (xhr.readyState === 4) {
+        console.log(xhr.status);
+        console.log(xhr.responseText);
+        window.location.href = "/assignItems";
+      }};
+
+  // asynchronous requests
+  xhr.open("POST", "/friends", true);
+  xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+  xhr.setRequestHeader("Content-Type", "application/json");
+  xhr.send(JSON.stringify(output));
+}
+
+function saveFriends(){
+
+    var friends = []
+    // LOOP THROUGH EACH ROW OF THE TABLE AFTER HEADER.
+    for (i = 1; i < table.rows.length; i++) {
+
+        // GET THE CELLS COLLECTION OF THE CURRENT ROW.
+        var objCells = table.rows.item(i).cells;
+
+        var friend = []
+        // LOOP THROUGH EACH CELL OF THE CURENT ROW TO READ CELL VALUES.
+        friend.push(objCells.item(0).innerHTML)
+        friend.push(userMap.get(objCells.item(0).innerHTML))
+        friends.push(friend)
+    }
+    output = {}
+    output["FRIENDS"] = friends
+    console.log(output)
+    emitFriends(output)
 }
